@@ -1,78 +1,143 @@
 /* global Phaser RemotePlayer io */
 
-var game = new Phaser.Game(800, 600, Phaser.AUTO, '', { preload: preload, create: create, update: update, render: render })
+/*
 
-function preload () {
-  game.load.image('earth', 'assets/light_sand.png')
-  game.load.spritesheet('dude', 'assets/dude.png', 64, 64)
-  game.load.spritesheet('enemy', 'assets/dude.png', 64, 64)
-}
+This is the Stable File!!!
+Do not Edit!!!
+Game.1.js and Server.1.js is Unstable!!!!!
+
+*/
+
+
+var game = new Phaser.Game(1000, 600, Phaser.CANVAS, 'game', { preload: preload, create: create, update: update, render: render});
+
+var player;
+var enemies;
+var sky;
+var explosionSound;
+var style = { font: "20px Arial", fill: "#ff0044", align: "center" };
+var obstacle;
+var bullet;
+var BUSTER;
+var text;
+var music;
+var cursors;
+var number1;
+var difficulty = 25;
+var difftext;
+
+var startX = 100;
+var startY = 400;
 
 var socket // Socket connection
 
-var land
+var timer;
+var score = 0;
 
-var player
-
-var enemies
-
-var currentSpeed = 0
-var cursors
-
-function create () {
-  socket = io.connect()
-
-  // Resize our game world to be a 2000 x 2000 square
-  game.world.setBounds(-500, -500, 1000, 1000)
-
-  // Our tiled scrolling background
-  land = game.add.tileSprite(0, 0, 800, 600, 'earth')
-  land.fixedToCamera = true
-
-  // The base of our player
-  var startX = Math.round(Math.random() * (1000) - 500)
-  var startY = Math.round(Math.random() * (1000) - 500)
-  player = game.add.sprite(startX, startY, 'dude')
-  player.anchor.setTo(0.5, 0.5)
-  player.animations.add('move', [0, 1, 2, 3, 4, 5, 6, 7], 20, true)
-  player.animations.add('stop', [3], 20, true)
-
-  // This will force it to decelerate and limit its speed
-  // player.body.drag.setTo(200, 200)
-  game.physics.enable(player, Phaser.Physics.ARCADE);
-  player.body.maxVelocity.setTo(400, 400)
-  player.body.collideWorldBounds = true
-
-  // Create some baddies to waste :)
-  enemies = []
-
-  player.bringToTop()
-
-  game.camera.follow(player)
-  game.camera.deadzone = new Phaser.Rectangle(150, 150, 500, 300)
-  game.camera.focusOnXY(0, 0)
-
-  cursors = game.input.keyboard.createCursorKeys()
-
-  // Start listening for events
-  setEventHandlers()
+function preload() {
+    game.load.spritesheet('car', 'assets/Spaceship.png', 32, 32);
+    game.load.spritesheet('greenCar', 'assets/Spaceship clone.png', 32, 32);
+    game.load.spritesheet('sky', 'assets/backgroundCyberPunk.png',389,218);
+    game.load.spritesheet('explode', 'assets/explode.png', 128,128);
+    game.load.spritesheet('boolet', 'assets/boolet.png', 28, 14, 4);
+    game.load.spritesheet('buster', 'assets/busterBullet.png',28,14);
+    game.load.audio('music','assets/race.mp3');
+    game.load.audio('sound','assets/explosion.mp3');
+    game.scale.pageAlignHorizontally = true;
+    game.scale.pageAlignVertically = true;
+    game.scale.refresh();
+    game.stage.smoothed=false;
 }
 
+
+function create() {
+    socket = io.connect();
+  
+  
+    game.physics.startSystem(Phaser.Physics.ARCADE);
+    
+        
+    sky = game.add.sprite(0, 0, 'sky');
+    sky.scale.setTo(2.75,2.75);
+    sky.animations.add('scroll');
+    sky.animations.play('scroll', 29.9, true);
+    
+    music = game.add.audio('music');
+    music.loopFull();
+    obstacle = game.add.group();
+    
+    // Player 1
+    player = game.add.sprite(startX, startY, 'car');
+    player.scale.setTo(4, 4);
+    game.physics.arcade.enable(player);
+    player.animations.add('drive');
+    player.enableBody = true;
+    player.body.drag.set(2000);
+    player.body.collideWorldBounds = true;
+    
+    player.animations.play('drive', 100, true);
+    player.body.setSize(20, 7, 33, 56);
+    
+    // game.time.events.loop(Phaser.Timer.SECOND*0.01, incrementDifficulty, this);
+    // game.time.events.loop(Phaser.Timer.SECOND/5, genBullet, this);
+    // game.time.events.loop(30*Phaser.Timer.SECOND/5, hellFire, this);
+    
+    cursors = game.input.keyboard.createCursorKeys();
+
+    enemies = [];
+        
+    game.physics.arcade.enable(obstacle);
+    obstacle.enableBody = true;
+    obstacle.checkWorldBounds = true;
+    obstacle.outOfBoundsKill = true;
+    game.physics.arcade.collide(obstacle,player);
+        
+    game.physics.arcade.collide(obstacle,obstacle);
+         
+    // Start listening for events
+    setEventHandlers();
+    
+    timer = setInterval(updateScore, 100);
+      text = game.add.text(16,16,'Score:'+score);
+      difftext = game.add.text(800,16,'Difficulty:'+difficulty);
+}
+
+    // socket events
 var setEventHandlers = function () {
   // Socket connection successful
-  socket.on('connect', onSocketConnected)
+  socket.on('connect', onSocketConnected);
 
   // Socket disconnection
-  socket.on('disconnect', onSocketDisconnect)
+  socket.on('disconnect', onSocketDisconnect);
 
   // New player message received
-  socket.on('new player', onNewPlayer)
+  socket.on('new player', onNewPlayer);
 
   // Player move message received
-  socket.on('move player', onMovePlayer)
+  socket.on('move player', onMovePlayer);
 
   // Player removed message received
-  socket.on('remove player', onRemovePlayer)
+  socket.on('remove player', onRemovePlayer);
+  
+  socket.on("new bullet",onNewBullet);
+
+};
+function onNewBullet(data){
+  
+  
+  bullet = obstacle.create(data.x,data.y,'boolet');
+    bullet.scale.setTo(3, 3);
+    game.physics.arcade.enable(bullet);
+    bullet.body.setSize(26,8,3,9);
+    bullet.body.immovable = true;
+    bullet.body.velocity.x = -20* data.d;
+    bullet.checkWorldBounds = true;
+    bullet.outOfBoundsKill = true;
+    bullet.animations.add('shooty', [0, 1, 2, 3, ], 15, true);
+    bullet.animations.play('shooty');
+    
+    difficulty = data.d;
+    
 }
 
 // Socket connected
@@ -118,7 +183,6 @@ function onMovePlayer (data) {
     console.log('Player not found: ', data.id)
     return
   }
-
   // Update player position
   movePlayer.player.x = data.x
   movePlayer.player.y = data.y
@@ -127,66 +191,137 @@ function onMovePlayer (data) {
 // Remove player
 function onRemovePlayer (data) {
   var removePlayer = playerById(data.id)
-
+  
+  
   // Player not found
   if (!removePlayer) {
     console.log('Player not found: ', data.id)
     return
   }
-
-  removePlayer.player.kill()
-
+  
+    
+  removePlayer.player.kill();
   // Remove player from array
   enemies.splice(enemies.indexOf(removePlayer), 1)
+  
 }
 
-function update () {
+
+
+
+function update() {
+  
+  
   for (var i = 0; i < enemies.length; i++) {
     if (enemies[i].alive) {
       enemies[i].update()
       game.physics.arcade.collide(player, enemies[i].player)
     }
   }
-
-  if (cursors.left.isDown) {
-    player.angle -= 4
-  } else if (cursors.right.isDown) {
-    player.angle += 4
+  //if the player touches a bullet
+  if (game.physics.arcade.collide(obstacle,player)){
+    player.kill();
+    clearInterval(timer);
+    var explosion = game.add.sprite(player.body.x-30,player.body.y-56,'explode');
+    explosion.animations.add('exploding',[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],20, false);
+    explosion.animations.play('exploding');
+    explosion.scale.setTo(1,1); 
+    socket.emit('player death', {id: player.id});
   }
 
-  if (cursors.up.isDown) {
-    // The speed we'll travel at
-    currentSpeed = 300
-  } else {
-    if (currentSpeed > 0) {
-      currentSpeed -= 4
+  game.world.bringToTop(player);
+  //player controls
+  if (cursors.left.isDown)
+  {
+        player.x -= 6;
     }
-  }
-  
-  game.physics.arcade.velocityFromRotation(player.rotation, currentSpeed, player.body.velocity)
-
-  if (currentSpeed > 0) {
-    player.animations.play('move')
-  } else {
-    player.animations.play('stop')
-  }
-
-  land.tilePosition.x = -game.camera.x
-  land.tilePosition.y = -game.camera.y
-
-  if (game.input.activePointer.isDown) {
-    if (game.physics.arcade.distanceToPointer(player) >= 10) {
-      currentSpeed = 300
-
-      player.rotation = game.physics.arcade.angleToPointer(player)
+  else if (cursors.right.isDown)
+  {     player.x += 6;
     }
-  }
+  else if (cursors.left.isUp || cursors.right.isUp){
+        player.x += 0;
+        }
+  if (cursors.up.isDown)
+  {     
+        player.y -= 6;
+    }
+  else if (cursors.down.isDown)
+  {
+       player.y += 6;
+    }
+  else if (cursors.up.isUp || cursors.down.isUp){
+        player.y += 0;
+        }
+         
+        
+  if (number1 === 1 ){
+    bullet = obstacle.create(1000,Math.floor((Math.random() * player.body.y+15)+ player.body.y-15),'boolet');
+    bullet.scale.setTo(3, 3);
+    game.physics.arcade.enable(bullet);
+    bullet.body.setSize(26,8,3,9);
+    bullet.body.immovable = true;
+    bullet.body.velocity.x = -20*difficulty;
+    bullet.checkWorldBounds = true;
+    bullet.outOfBoundsKill = true;
+    bullet.animations.add('shooty', [0, 1, 2, 3, ], 15, true);
+    bullet.animations.play('shooty');
+    
+    }
+  if (number1 === 3 ){
+    bullet = obstacle.create(1000,Math.floor((Math.random() * 600)+1),'boolet');
+    bullet.scale.setTo(3, 3);
+    game.physics.arcade.enable(bullet);
+    bullet.body.setSize(26,8,3,9);
+    bullet.body.immovable = true;
+    bullet.body.velocity.x = -20*difficulty;
+    bullet.checkWorldBounds = true;
+    bullet.outOfBoundsKill = true;
+    bullet.animations.add('shooty', [0, 1, 2, 3, ], 15, true);
+    bullet.animations.play('shooty');
+    
 
-  socket.emit('move player', { x: player.x, y: player.y })
+    }
+
+socket.emit('move player', { x: player.x, y: player.y });
+ 
+}
+function genBullet(){
+     number1 = Math.floor((Math.random() * 3) + 1);
+     game.time.events.add(Phaser.Timer.SECOND*0.0001, number0, this);
+}
+function number0(){
+    number1 = 0;
+}
+function hellFire(){
+        BUSTER = obstacle.create(1000,Math.floor((Math.random() * 600)+1),'buster');
+        BUSTER.scale.setTo(3, 3);
+        game.physics.arcade.enable(BUSTER);
+        BUSTER.body.setSize(19,12,12,3);
+        BUSTER.body.immovable = true;
+        BUSTER.body.velocity.x = -300;
+        BUSTER.checkWorldBounds = true;
+        BUSTER.outOfBoundsKill = true;
+        BUSTER.animations.add('shooty', [0,1,2,3,4,5,6,7,8,9,10], 15, true);
+        BUSTER.animations.play('shooty');
+        game.time.events.add(Phaser.Timer.SECOND*5, burst, this);
+}
+function incrementDifficulty(){
+     difficulty += .1;
+}
+function updateScore(){
+  score += 1;
+  text.setText('Score:'+score);
+  difftext.setText('Difficulty:'+difficulty);
+
+}
+function burst(){
+    //explode into a cluster of bullets idk 
 }
 
-function render () {
-
+function render(){
+    //for debugging
+    // game.debug.body(player);
+    // game.debug.body(obstacle);
 }
 
 // Find player by ID
